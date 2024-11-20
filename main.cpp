@@ -144,8 +144,32 @@ Matrix4x4 Inverse(const Matrix4x4& m) {
 	return result;
 }
 
+Vector3 Transform(Vector3 vector, Matrix4x4 matrix) {
+	Vector3 result;
+	result = {
+		vector.x * matrix.m[0][0] + vector.y * matrix.m[1][0] + vector.z * matrix.m[2][0] + matrix.m[3][0],
+		vector.x * matrix.m[0][1] + vector.y * matrix.m[1][1] + vector.z * matrix.m[2][1] + matrix.m[3][1],
+		vector.x * matrix.m[0][2] + vector.y * matrix.m[1][2] + vector.z * matrix.m[2][2] + matrix.m[3][2]
+	};
+	float w = vector.x * matrix.m[0][3] + vector.y * matrix.m[1][3] + vector.z * matrix.m[2][3] + matrix.m[3][3];
+
+	assert(w != 0.0f);
+	result.x /= w;
+	result.y /= w;
+	result.z /= w;
+
+	return result;
+}
+
 static const int kRowHeight = 20;
 static const int kColumnWidth = 60;
+
+void VectorScreenPrintf(float width, float height, Vector3 v, const char* label) {
+	Novice::ScreenPrintf(int(width), int(height), "%.02f", v.x);
+	Novice::ScreenPrintf(int(width + kColumnWidth), int(height), "%.02f", v.y);
+	Novice::ScreenPrintf(int(width + kColumnWidth * 2), int(height), "%.02f", v.z);
+	Novice::ScreenPrintf(int(width + kColumnWidth * 3), int(height), "%s", label);
+}
 
 void MatrixScreenPrintf(int x, int y, const Matrix4x4& matrix, const char* label) {
 	Novice::ScreenPrintf(x, y, "%s", label);
@@ -239,6 +263,41 @@ void QuaternionScreenPrintf(int x, int y, Quaternion quaternion, const char* lab
 	Novice::ScreenPrintf(x + kColumnWidth * 3, y, "%.02f", quaternion.w);
 	Novice::ScreenPrintf(x + kColumnWidth * 4, y, label);
 }
+
+//任意軸回転を表すQuaternionの生成
+Quaternion MakeRotateAxisAngleQuaternion(const Vector3& axis, float angle) {
+	Quaternion result = {
+		axis.x * sin(angle / 2),axis.y * sin(angle / 2),axis.z * sin(angle / 2),cos(angle / 2)
+	};
+	return result;
+}
+
+//ベクトルをQuaternionで回転させた結果のベクトルを求める
+Vector3 RotateVector(const Vector3& vector, const Quaternion& q) {
+	// ベクトルをクォータニオンに変換 (スカラー部分が 0)
+	Quaternion vecQuat(vector.x, vector.y, vector.z, 0);
+
+	// 回転クォータニオンとその共役を使って回転
+	Quaternion qConjugate = Conjugate(q);
+
+	// 回転を計算
+	Quaternion rotatedQuat = Multiply(Multiply(q, vecQuat), qConjugate);
+
+	// 結果をベクトルとして返す
+	return Vector3(rotatedQuat.x, rotatedQuat.y, rotatedQuat.z);
+}
+
+//Quaternionから回転行列を求める
+Matrix4x4 MakeRotateMatrix(const Quaternion q) {
+	Matrix4x4 result = {
+		(q.w * q.w) + (q.x * q.x) - (q.y * q.y) - (q.z * q.z),2 * ((q.x * q.y) + (q.w * q.z)),2 * ((q.x * q.z) - (q.w * q.y)),0,
+		2 * ((q.x * q.y) - (q.w * q.z)),(q.w * q.w) - (q.x * q.x) + (q.y * q.y) - (q.z * q.z),2 * ((q.y * q.z) + (q.w * q.x)),0,
+		2 * ((q.x * q.z) + (q.w * q.y)),2 * ((q.y * q.z) - (q.w * q.x)),(q.w * q.w) - (q.x * q.x) - (q.y * q.y) + (q.z * q.z),0,
+		0,0,0,1
+	};
+	return result;
+}
+
 #pragma endregion
 
 // Windowsアプリでのエントリーポイント(main関数)
@@ -249,15 +308,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	const int kWindowHeight = 720;
 	Novice::Initialize(kWindowTitle, kWindowWidth, kWindowHeight);
 
-	Quaternion q1 = { 2.0f, 3.0f, 4.0f, 1.0f };
-	Quaternion q2 = { 1.0f, 3.0f, 5.0f, 2.0f };
-	Quaternion identity = IdentityQuaternion();
-	Quaternion conj = Conjugate(q1);
-	Quaternion inv = Inverse(q1);
-	Quaternion normal = Normalize(q1);
-	Quaternion mul1 = Multiply(q1, q2);
-	Quaternion mul2 = Multiply(q2, q1);
-	float norm = Norm(q1);
+	Quaternion rotation = MakeRotateAxisAngleQuaternion(Normalize(Vector3{ 1.0f,0.4f,-0.2f }), 0.45f);
+	Vector3 pointY = { 2.1f,-0.9f,1.3f };
+	Matrix4x4 rotateMatrix = MakeRotateMatrix(rotation);
+	Vector3 rotateByQuaternion = RotateVector(pointY, rotation);
+	Vector3 rotateByMatrix = Transform(pointY, rotateMatrix);
 
 	// キー入力結果を受け取る箱
 	char keys[256] = { 0 };
@@ -284,13 +339,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		/// ↓描画処理ここから
 		///
 
-		QuaternionScreenPrintf(0, kRowHeight * 0, identity, "   : Identity");
-		QuaternionScreenPrintf(0, kRowHeight * 1, conj, "   : Conjugate");
-		QuaternionScreenPrintf(0, kRowHeight * 2, inv, "   : Inverse");
-		QuaternionScreenPrintf(0, kRowHeight * 3, normal, "   : Normalize");
-		QuaternionScreenPrintf(0, kRowHeight * 4, mul1, "   : Multiply(q1, q2)");
-		QuaternionScreenPrintf(0, kRowHeight * 5, mul2, "   : Multiply(q2, q1)");
-		Novice::ScreenPrintf(0, kRowHeight * 6, "%.02f                          : Norm", norm);
+		QuaternionScreenPrintf(0, kRowHeight * 0, rotation, "    : rotation");
+		MatrixScreenPrintf(0, kRowHeight * 1, rotateMatrix, "rotateMatrix");
+		VectorScreenPrintf(0, kRowHeight * 6, rotateByQuaternion, "    : rotateByQuaternion");
+		VectorScreenPrintf(0, kRowHeight * 7, rotateByMatrix, "    : rotateByMatrix");
 
 		///
 		/// ↑描画処理ここまで
