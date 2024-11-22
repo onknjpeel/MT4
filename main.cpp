@@ -298,6 +298,36 @@ Matrix4x4 MakeRotateMatrix(const Quaternion q) {
 	return result;
 }
 
+//球面線形補完
+Quaternion Slerp(const Quaternion& q0, const Quaternion& q1, float t) {
+	Quaternion p0 = Normalize(q0);
+	Quaternion p1 = Normalize(q1);
+
+	float dot = p0.x * p1.x + p0.y * p1.y + p0.z * p1.z + p0.w * p1.w;
+
+	float theta = acosf(dot);
+
+	if (fabsf(theta) < 1e-6) {
+		return Normalize({
+			p0.x + t * (p1.x - p0.x),
+			p0.y + t * (p1.y - p0.y),
+			p0.z + t * (p1.z - p0.z),
+			p0.w + t * (p1.w - p0.w)
+			});
+	}
+
+	float sinTheta = sin(theta);
+	float scale0 = sin((1 - t) * theta) / sinTheta;
+	float scale1 = sin(t * theta) / sinTheta;
+
+	return Normalize({
+		scale0 * p0.x + scale1 * p1.x,
+		scale0 * p0.y + scale1 * p1.y,
+		scale0 * p0.z + scale1 * p1.z,
+		scale0 * p0.w + scale1 * p1.w
+		});
+}
+
 #pragma endregion
 
 // Windowsアプリでのエントリーポイント(main関数)
@@ -308,11 +338,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	const int kWindowHeight = 720;
 	Novice::Initialize(kWindowTitle, kWindowWidth, kWindowHeight);
 
-	Quaternion rotation = MakeRotateAxisAngleQuaternion(Normalize(Vector3{ 1.0f,0.4f,-0.2f }), 0.45f);
-	Vector3 pointY = { 2.1f,-0.9f,1.3f };
-	Matrix4x4 rotateMatrix = MakeRotateMatrix(rotation);
-	Vector3 rotateByQuaternion = RotateVector(pointY, rotation);
-	Vector3 rotateByMatrix = Transform(pointY, rotateMatrix);
+	Quaternion rotation0 = MakeRotateAxisAngleQuaternion(Normalize(Vector3{ 0.71f,0.71f,0.0f }), 0.3f);
+	Quaternion rotation1 = MakeRotateAxisAngleQuaternion(Normalize(Vector3{ 0.71f,0.0f,0.71f }), 3.141592f);
+
+	Quaternion interpolate0 = Slerp(rotation0, rotation1, 0.0f);
+	Quaternion interpolate1 = Slerp(rotation0, rotation1, 0.3f);
+	Quaternion interpolate2 = Slerp(rotation0, rotation1, 0.5f);
+	Quaternion interpolate3 = Slerp(rotation0, rotation1, 0.7f);
+	Quaternion interpolate4 = Slerp(rotation0, rotation1, 1.0f);
 
 	// キー入力結果を受け取る箱
 	char keys[256] = { 0 };
@@ -339,10 +372,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		/// ↓描画処理ここから
 		///
 
-		QuaternionScreenPrintf(0, kRowHeight * 0, rotation, "    : rotation");
-		MatrixScreenPrintf(0, kRowHeight * 1, rotateMatrix, "rotateMatrix");
-		VectorScreenPrintf(0, kRowHeight * 6, rotateByQuaternion, "    : rotateByQuaternion");
-		VectorScreenPrintf(0, kRowHeight * 7, rotateByMatrix, "    : rotateByMatrix");
+		QuaternionScreenPrintf(0, kRowHeight * 0, interpolate0, ": interpolate0, Slerp(q0, p1, 0.0f)");
+		QuaternionScreenPrintf(0, kRowHeight * 1, interpolate1, ": interpolate1, Slerp(q0, p1, 0.3f)");
+		QuaternionScreenPrintf(0, kRowHeight * 2, interpolate2, ": interpolate2, Slerp(q0, p1, 0.5f)");
+		QuaternionScreenPrintf(0, kRowHeight * 3, interpolate3, ": interpolate3, Slerp(q0, p1, 0.7f)");
+		QuaternionScreenPrintf(0, kRowHeight * 4, interpolate4, ": interpolate4, Slerp(q0, p1, 1.0f)");
 
 		///
 		/// ↑描画処理ここまで
