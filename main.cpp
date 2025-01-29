@@ -1,6 +1,11 @@
+#define NOMINMAX
+
 #include <Novice.h>
 #include <cassert>
 #include <cmath>
+#include <algorithm>
+#include <utility>
+#include <iostream>
 
 const char kWindowTitle[] = "MT4_01_01_Basic";
 
@@ -15,8 +20,8 @@ struct Matrix4x4 {
 
 
 float Dot(const Vector3& v1, const Vector3& v2) { return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z; }
-float Length(const Vector3& v) { return std::sqrt(Dot(v, v)); }
 
+float Length(const Vector3& v) { return std::sqrt(Dot(v, v)); }
 
 Vector3 Normalize(const Vector3& v) {
 	float length = Length(v);
@@ -267,7 +272,7 @@ void QuaternionScreenPrintf(int x, int y, Quaternion quaternion, const char* lab
 //任意軸回転を表すQuaternionの生成
 Quaternion MakeRotateAxisAngleQuaternion(const Vector3& axis, float angle) {
 	Quaternion result = {
-		axis.x * sin(angle / 2),axis.y * sin(angle / 2),axis.z * sin(angle / 2),cos(angle / 2)
+		axis.x * std::sin(angle / 2),axis.y * std::sin(angle / 2),axis.z * std::sin(angle / 2),std::cos(angle / 2)
 	};
 	return result;
 }
@@ -298,35 +303,47 @@ Matrix4x4 MakeRotateMatrix(const Quaternion q) {
 	return result;
 }
 
-//球面線形補完
+Quaternion operator-(Quaternion q) {
+	Quaternion result;
+	result = { -q.x,-q.y ,-q.z ,-q.w };
+	return result;
+}
+
+Quaternion operator*(const Quaternion& q, float scalar) {
+	return { q.x * scalar, q.y * scalar, q.z * scalar, q.w * scalar };
+}
+
+Quaternion operator*(float scalar, const Quaternion& q) {
+	return q * scalar;  // 既存のオーバーロードを利用
+}
+
+Quaternion operator+(const Quaternion& q1, const Quaternion& q2) {
+	return { q1.x + q2.x, q1.y + q2.y, q1.z + q2.z, q1.w + q2.w };
+}
+
+float Dot(const Quaternion& q0, const Quaternion& q1) {
+	return q0.x * q1.x + q0.y * q1.y + q0.z * q1.z + q0.w * q1.w;
+}
+
 Quaternion Slerp(const Quaternion& q0, const Quaternion& q1, float t) {
-	Quaternion p0 = Normalize(q0);
-	Quaternion p1 = Normalize(q1);
+	
+	Quaternion p0 = q0;
+	Quaternion p1 = q1;
 
-	float dot = p0.x * p1.x + p0.y * p1.y + p0.z * p1.z + p0.w * p1.w;
-
-	float theta = acosf(dot);
-
-	if (fabsf(theta) < 1e-6) {
-		return Normalize({
-			p0.x + t * (p1.x - p0.x),
-			p0.y + t * (p1.y - p0.y),
-			p0.z + t * (p1.z - p0.z),
-			p0.w + t * (p1.w - p0.w)
-			});
+	float dot = Dot(q0, q1);
+	if (dot < 0) {
+		p0 = -p0;
+		dot = -dot;
 	}
 
-	float sinTheta = sin(theta);
-	float scale0 = sin((1 - t) * theta) / sinTheta;
-	float scale1 = sin(t * theta) / sinTheta;
+	float theta = std::acos(dot);
 
-	return Normalize({
-		scale0 * p0.x + scale1 * p1.x,
-		scale0 * p0.y + scale1 * p1.y,
-		scale0 * p0.z + scale1 * p1.z,
-		scale0 * p0.w + scale1 * p1.w
-		});
+	float scale0 = std::sin((1 - t) * theta) / std::sin(theta);
+	float scale1 = std::sin(t * theta) / std::sin(theta);
+
+	return scale0 * p0 + scale1 * p1;
 }
+
 
 #pragma endregion
 
@@ -338,8 +355,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	const int kWindowHeight = 720;
 	Novice::Initialize(kWindowTitle, kWindowWidth, kWindowHeight);
 
-	Quaternion rotation0 = MakeRotateAxisAngleQuaternion(Normalize(Vector3{ 0.71f,0.71f,0.0f }), 0.3f);
-	Quaternion rotation1 = MakeRotateAxisAngleQuaternion(Normalize(Vector3{ 0.71f,0.0f,0.71f }), 3.141592f);
+	Quaternion rotation0 = MakeRotateAxisAngleQuaternion({ 0.71f,0.71f,0.0f }, 0.3f);
+	Quaternion rotation1 = MakeRotateAxisAngleQuaternion({ 0.71f,0.0f,0.71f }, 3.141592f);
 
 	Quaternion interpolate0 = Slerp(rotation0, rotation1, 0.0f);
 	Quaternion interpolate1 = Slerp(rotation0, rotation1, 0.3f);
